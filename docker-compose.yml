@@ -1,0 +1,50 @@
+# OPTIONAL deployment method:  docker compose up --build
+# Local development does NOT need Docker - see README.
+# The ${VAR:-default} values are DEMO defaults. For anything real, create a .env next to this file
+# (see .env.example) and set strong values.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: eventhub
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-eventhub_demo_pw}
+      POSTGRES_DB: eventhub
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eventhub -d eventhub"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg2://eventhub:${POSTGRES_PASSWORD:-eventhub_demo_pw}@db:5432/eventhub
+      JWT_SECRET: ${JWT_SECRET:-demo-only-secret-change-me-before-real-use-0123456789}
+      CORS_ORIGINS: http://localhost:5173
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    volumes:
+      - uploads:/app/app/static/uploads
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  uploads:
